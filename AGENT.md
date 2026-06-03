@@ -360,3 +360,4 @@ Each risk should be either closed with validation evidence or recorded with a co
 ## 12. Progress Log
 
 - 2026-06-03: Investigated repository structure, existing `xiao_nrf54l15` implementation, `xiao54_flash` package layout, and external `xiao_nrf54lm20a` Zephyr board definition. Created branch `nrf54lm20a_support` from `origin/master` because no `main` branch exists in the current remote. Added this `AGENT.md` as the execution guide for the remaining automated adaptation work.
+- 2026-06-03: Restored `lib/micropython` to the upstream PR `18030` Zephyr baseline required by this repository after finding the submodule worktree was not usable. Imported `boards/seeed/xiao_nrf54lm20a/` from the Seeed Zephyr board source, fixed the `cpuflpr.dts` common DTSI include typo, and added `pre_dt_board.cmake` to wire Seeed user C modules for MicroPython builds.
