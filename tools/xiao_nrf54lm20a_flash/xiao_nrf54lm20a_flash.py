@@ -3,71 +3,29 @@
 """
 Flashing helper for Seeed XIAO nRF54LM20A.
 
-This script intentionally mirrors the working platform-seeedboards strategy:
-- ensure a pyOCD build that exposes the nrf54lm20a target
-- invoke `python -m pyocd flash ...` directly
-- avoid custom low-level FileProgrammer logic
+Default path: OpenOCD over CMSIS-DAP, aligned with platform-seeedboards default uploader.
+Fallback path: pyOCD (optional, for debugging only).
 """
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+OPENOCD_CFG = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR))),
+    "boards",
+    "seeed",
+    "xiao_nrf54lm20a",
+    "support",
+    "openocd.cfg",
+)
 
 PYOCD_SPEC = "pyocd @ git+https://github.com/StarSphere-1024/pyOCD.git@lm20_stable"
 TARGET = "nrf54lm20a"
 FREQUENCY = "4000000"
-
-
-def ensure_expected_pyocd() -> None:
-    if os.environ.get("SKIP_PYOCD_UPGRADE") == "1":
-        print("[INFO] SKIP_PYOCD_UPGRADE=1 set; skipping pyOCD compatibility check.")
-        return
-
-    try:
-        output = subprocess.check_output(
-            [sys.executable, "-m", "pyocd", "list", "--targets"],
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        if TARGET in output.lower():
-            print(f"[INFO] Detected pyOCD target support for {TARGET}.")
-            return
-    except Exception:
-        pass
-
-    print(f"[INFO] Installing pyOCD fork with {TARGET} support ...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
-    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", PYOCD_SPEC, "libusb"], check=True)
-
-
-def auto_select_probe() -> str:
-    output = subprocess.check_output(
-        [sys.executable, "-m", "pyocd", "list", "--probes", "--no-header"],
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-
-    probes = []
-    for line in output.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split()
-        if parts:
-            probes.append(parts[0])
-
-    if not probes:
-        print("[ERROR] No connected debug probes found.")
-        sys.exit(1)
-    if len(probes) > 1:
-        print("[ERROR] Multiple probes connected. Please specify one with --probe <unique_id>:")
-        for probe in probes:
-            print(f"  - {probe}")
-        sys.exit(1)
-
-    print(f"[INFO] Auto-selected probe: {probes[0]}")
-    return probes[0]
 
 
 def auto_select_hex() -> str:
@@ -93,35 +51,112 @@ def auto_select_hex() -> str:
     return candidate
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Flash Seeed XIAO nRF54LM20A firmware with pyOCD.")
-    parser.add_argument("--hex", help="Path to the HEX file to be programmed.")
-    parser.add_argument("--probe", help="Specify the unique ID of the debug probe to use.")
-    args = parser.parse_args()
+def find_openocd() -> str:
+    candidates = [
+        shutil.which("openocd"),
+        r"C:\Users\seeed\AppData\Local\xPacks\OpenOCD\xpack-openocd-0.12.0-7\bin\openocd.exe",
+        r"C:\ProgramData\chocolatey\bin\openocd.exe",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    print("[ERROR] openocd executable not found.")
+    sys.exit(1)
 
+
+def ensure_expected_pyocd() -> None:
+    if os.environ.get("SKIP_PYOCD_UPGRADE") == "1":
+        print("[INFO] SKIP_PYOCD_UPGRADE=1 set; skipping pyOCD compatibility check.")
+        return
+
+    try:
+        output = subprocess.check_output(
+            [sys.executable, "-m", "pyocd", "list", "--targets"],
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        if TARGET in output.lower():
+            print(f"[INFO] Detected pyOCD target support for {TARGET}.")
+            return
+    except Exception:
+        pass
+
+    print(f"[INFO] Installing pyOCD fork with {TARGET} support ...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", PYOCD_SPEC, "libusb"], check=True)
+
+
+def flash_with_openocd(hex_path: str, probe_id: str | None) -> int:
+    openocd = find_openocd()
+    cmd = [openocd]
+
+    if probe_id:
+        cmd.extend(["-c", f"cmsis_dap_serial {probe_id}"])
+
+    cmd.extend(
+        [
+            "-f",
+            OPENOCD_CFG,
+            "-c",
+            "init",
+            "-c",
+            "nrf54l_mass_erase",
+            "-c",
+            f"nrf54lm20a-load {{{hex_path}}}",
+            "-c",
+            "reset run",
+            "-c",
+            "shutdown",
+        ]
+    )
+
+    print("[INFO] Running:", " ".join(cmd))
+    return subprocess.run(cmd).returncode
+
+
+def flash_with_pyocd(hex_path: str, probe_id: str | None) -> int:
     ensure_expected_pyocd()
-
-    probe_id = args.probe or auto_select_probe()
-    hex_path = args.hex or auto_select_hex()
-
-    print(f"[INFO] Using HEX file: {hex_path}")
     cmd = [
         sys.executable,
         "-m",
         "pyocd",
         "flash",
-        "--probe",
-        probe_id,
-        "--target",
-        TARGET,
-        "--frequency",
-        FREQUENCY,
-        hex_path,
     ]
-
+    if probe_id:
+        cmd.extend(["--probe", probe_id])
+    cmd.extend(
+        [
+            "--target",
+            TARGET,
+            "--frequency",
+            FREQUENCY,
+            hex_path,
+        ]
+    )
     print("[INFO] Running:", " ".join(cmd))
-    result = subprocess.run(cmd)
-    sys.exit(result.returncode)
+    return subprocess.run(cmd).returncode
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Flash Seeed XIAO nRF54LM20A firmware.")
+    parser.add_argument("--hex", help="Path to the HEX file to be programmed.")
+    parser.add_argument("--probe", help="Specify the unique ID of the debug probe to use.")
+    parser.add_argument(
+        "--backend",
+        choices=["openocd", "pyocd"],
+        default="openocd",
+        help="Flashing backend. Default uses OpenOCD to match platform-seeedboards.",
+    )
+    args = parser.parse_args()
+
+    hex_path = args.hex or auto_select_hex()
+    print(f"[INFO] Using HEX file: {hex_path}")
+
+    if args.backend == "openocd":
+        rc = flash_with_openocd(hex_path, args.probe)
+    else:
+        rc = flash_with_pyocd(hex_path, args.probe)
+    sys.exit(rc)
 
 
 if __name__ == "__main__":
