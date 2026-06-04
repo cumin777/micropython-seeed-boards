@@ -14,7 +14,8 @@ import subprocess
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OPENOCD_CFG = os.path.join(
+LOCAL_OPENOCD_CFG = os.path.join(SCRIPT_DIR, "openocd.cfg")
+REPO_OPENOCD_CFG = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR))),
     "boards",
     "seeed",
@@ -64,6 +65,16 @@ def find_openocd() -> str:
     sys.exit(1)
 
 
+def find_openocd_cfg() -> str:
+    for candidate in (LOCAL_OPENOCD_CFG, REPO_OPENOCD_CFG):
+        if os.path.isfile(candidate):
+            return candidate
+    print("[ERROR] openocd.cfg not found. Expected one of:")
+    print(f"  - {LOCAL_OPENOCD_CFG}")
+    print(f"  - {REPO_OPENOCD_CFG}")
+    sys.exit(1)
+
+
 def ensure_expected_pyocd() -> None:
     if os.environ.get("SKIP_PYOCD_UPGRADE") == "1":
         print("[INFO] SKIP_PYOCD_UPGRADE=1 set; skipping pyOCD compatibility check.")
@@ -88,6 +99,7 @@ def ensure_expected_pyocd() -> None:
 
 def flash_with_openocd(hex_path: str, probe_id: str | None) -> int:
     openocd = find_openocd()
+    openocd_cfg = find_openocd_cfg()
     cmd = [openocd]
 
     if probe_id:
@@ -96,7 +108,7 @@ def flash_with_openocd(hex_path: str, probe_id: str | None) -> int:
     cmd.extend(
         [
             "-f",
-            OPENOCD_CFG,
+            openocd_cfg,
             "-c",
             "init",
             "-c",
