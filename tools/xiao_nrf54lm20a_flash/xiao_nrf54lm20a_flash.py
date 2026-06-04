@@ -10,32 +10,51 @@ import os
 import subprocess
 import sys
 import tempfile
-from importlib import import_module
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 
-def ensure_latest(packages: List[str]) -> None:
+PYOCD_SPEC = "pyocd @ git+https://github.com/StarSphere-1024/pyOCD.git@lm20_stable"
+
+
+def ensure_expected_pyocd() -> None:
     if os.environ.get("SKIP_PYOCD_UPGRADE") == "1":
-        print("[INFO] SKIP_PYOCD_UPGRADE=1 set; skipping auto-upgrade of dependencies.")
+        print("[INFO] SKIP_PYOCD_UPGRADE=1 set; skipping pyOCD compatibility check.")
         return
-    for pkg in packages:
-        try:
-            import_module(pkg)
-        except Exception:
-            pass
-        print(f"[INFO] Ensuring latest {pkg} (pip install -U {pkg}) ...")
-        try:
-            subprocess.run([sys.executable, "-m", "pip", "install", "-U", pkg], check=True)
-        except subprocess.CalledProcessError as exc:
-            print(f"[WARN] Failed to upgrade {pkg}: {exc}. Continuing if import works.")
-            try:
-                import_module(pkg)
-            except Exception:
-                print(f"[ERROR] {pkg} not installed and upgrade failed; aborting.")
-                sys.exit(1)
+
+    try:
+        output = subprocess.check_output(
+            [sys.executable, "-m", "pyocd", "list", "--targets"],
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        if "nrf54lm20a" in output.lower():
+            print("[INFO] Detected pyOCD target support for nrf54lm20a.")
+            return
+    except Exception:
+        pass
+
+    print("[INFO] Installing pyOCD fork with nrf54lm20a support ...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "intelhex"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", PYOCD_SPEC, "libusb"], check=True)
 
 
-ensure_latest(["intelhex", "pyocd"])
+def ensure_intelhex() -> None:
+    if os.environ.get("SKIP_PYOCD_UPGRADE") == "1":
+        return
+    try:
+        import intelhex  # noqa: F401
+    except Exception:
+        print("[INFO] Installing intelhex ...")
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "intelhex"], check=True)
+        except subprocess.CalledProcessError:
+            print("[ERROR] Failed to install intelhex.")
+            sys.exit(1)
+
+
+ensure_expected_pyocd()
+ensure_intelhex()
 
 from intelhex import IntelHex
 from pyocd.core.helpers import ConnectHelper
@@ -200,9 +219,9 @@ def main() -> None:
     if not args.hex:
         args.hex = auto_select_hex()
 
-    logger.info("Using HEX file: %s", args.hex)
+        logger.info("Using HEX file: %s", args.hex)
     session_options = {
-        "target_override": "nrf54l",
+        "target_override": "nrf54lm20a",
         "connect_mode": "under-reset",
     }
 
