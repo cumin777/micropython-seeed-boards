@@ -32,6 +32,16 @@ def print_help():
     print("  exit                stop receiver")
 
 
+def read_command(prompt="test> "):
+    sys.stdout.write(prompt)
+    if hasattr(sys.stdout, "flush"):
+        sys.stdout.flush()
+    line = sys.stdin.readline()
+    if line is None:
+        return ""
+    return line.strip()
+
+
 def test_info():
     print("machine:", sys.implementation._machine)
     print("platform:", sys.platform)
@@ -161,7 +171,7 @@ def main():
 
     while True:
         try:
-            line = input("test> ").strip()
+            line = read_command("test> ")
         except (EOFError, KeyboardInterrupt):
             print("\nreceiver stopped")
             break
