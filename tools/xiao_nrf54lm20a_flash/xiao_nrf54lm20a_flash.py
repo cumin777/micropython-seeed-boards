@@ -116,12 +116,6 @@ def main() -> None:
         TARGET,
         "--frequency",
         FREQUENCY,
-        "--connect",
-        "under-reset",
-        "--erase",
-        "chip",
-        "--format",
-        "hex",
         hex_path,
     ]
 
