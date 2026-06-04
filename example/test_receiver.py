@@ -86,7 +86,7 @@ def test_adc(count=10):
 
 def test_pwm(seconds=3):
     pwm = XiaoPWM(PWM_CHANNEL)
-    pwm.init(freq=1000)
+    pwm.init(freq=1000, duty_ns=20000)
     start = time.time()
     step = 0
     print("Running PWM fade for", seconds, "seconds")
