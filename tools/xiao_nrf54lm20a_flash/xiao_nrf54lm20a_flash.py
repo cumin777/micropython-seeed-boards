@@ -116,6 +116,8 @@ def flash_with_openocd(hex_path: str, probe_id: str | None) -> int:
             "-c",
             f"nrf54lm20a-load {{{hex_path}}}",
             "-c",
+            f"verify_image {{{hex_path}}}",
+            "-c",
             "reset run",
             "-c",
             "shutdown",
@@ -168,6 +170,8 @@ def main() -> None:
         rc = flash_with_openocd(hex_path, args.probe)
     else:
         rc = flash_with_pyocd(hex_path, args.probe)
+    if rc == 0:
+        print("[INFO] Flash and verify completed successfully.")
     sys.exit(rc)
 
 
