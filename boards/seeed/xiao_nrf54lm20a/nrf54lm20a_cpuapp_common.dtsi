@@ -120,6 +120,17 @@
 	status = "okay";
 };
 
+&gpio3 {
+	status = "okay";
+
+	imu_cs_high: imu_cs_high {
+		gpio-hog;
+		gpios = <12 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "imu_cs_high";
+	};
+};
+
 &gpiote20 {
 	status = "okay";
 };
