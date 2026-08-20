@@ -90,16 +90,15 @@ jobs:
         run: |
           tools/xiao_stm32c5/package.sh "${GITHUB_SHA::12}"
 
-      - name: Upload build artifacts
+      - name: Upload delivery package artifact
+        # The artifact IS the delivery package (firmware + tests + docs)
+        # as assembled by package.sh - no build/debug files. The tarball
+        # stays in dist/ for the GitHub Release upload step below.
         uses: actions/upload-artifact@v4
         with:
           name: xiao-stm32c5-micropython
-          path: |
-            build/xiao_stm32c5/zephyr/zephyr.elf
-            build/xiao_stm32c5/zephyr/zephyr.bin
-            build/xiao_stm32c5/zephyr/zephyr.hex
-            build/xiao_stm32c5/zephyr/micropython-xiao-stm32c5.uf2
-            dist/*.tar.gz
+          path: dist/xiao-stm32c5-micropython-*
+          if-no-files-found: error
 
       - name: Upload package to GitHub Release
         if: github.event_name == 'release'
